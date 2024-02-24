@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# Zenith Go Firmware 20240224.01
+# Zenith Go Firmware 20240224.05
 # © 2024 Zenith - All Rights Reserved
 
 # Import configuration
@@ -91,45 +91,25 @@ def analyze_image(image_path):
         "Authorization": f"Bearer {api_key}"
     }
 
-    payload = {
-        "model": "gpt-4-vision-preview",
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": question
-                    },
-                    {
-                        "type": "image",
-                        "image": {
-                            "data": {
-                                "url": f"data:image/jpeg;base64,{base64_image}",
-                                "detail": "low"
-                            }
-                        }
-                    }
-                ]
-            }
-        ],
-        "max_tokens": 100
-    }
-
-    try:
-        # Send the request
-        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-        response_json = response.json()
-
-        print("[+] Received response from OpenAI.")
-
-        # Extract the embedded JSON response
-        return extract_json_text(response_json['choices'][0]['message']['content'])
-
-    except Exception as e:
-        print("OpenAI API call failed:", e)
-        return None
-
+payload = {
+    "model": "gpt-4-vision-preview",
+    "messages": [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": question
+                },
+                {
+                    "type": "image_url",
+                    "image_url": f"data:image/jpeg;base64,{base64_image}"
+                }
+            ]
+        }
+    ],
+    "max_tokens": 100
+}
 
 
     try:
@@ -137,14 +117,16 @@ def analyze_image(image_path):
         response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
         response_json = response.json()
 
-        print("[+] Received response from OpenAI.")
+        print("[+] Received response from OpenAI:")
+        print(response_json)  # Print the response for debugging purposes
 
         # Extract the embedded JSON response
-        return extract_json_text(response_json['choices'][0]['message']['content'])
+        # return extract_json_text(response_json['choices'][0]['message']['content'])
 
     except Exception as e:
         print("OpenAI API call failed:", e)
         return None
+
 
 
 def grab_and_upload():
@@ -205,19 +187,21 @@ def ftp_upload(remote_filename, local_filename=None, latest=False):
 
 
 def main():
-    print("Zenith Go Firmware 20240224.01")
+    print("Zenith Go Firmware 20240224.05")
     print("© 2024 Zenith - All Rights Reserved")
+    print("")
     print("Countdown starting...")
 
     for i in range(5, 0, -1):
         print(f"Countdown: {i}")
         time.sleep(1)
 
-    print("Ready for button input")
+
 
     try:
         while True:
             # Check if the camera button was pressed
+            print("Ready for button input")
             if GPIO.input(CAMERA_BTN) == GPIO.HIGH:
                 # It is, verify this is the first time (rising edge)
                 if btn_press is False:
