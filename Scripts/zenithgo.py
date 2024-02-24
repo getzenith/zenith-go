@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# Zenith Go Firmware 20240224.05
+# Zenith Go Firmware 20240224.06
 # © 2024 Zenith - All Rights Reserved
 
 # Import configuration
@@ -74,16 +74,17 @@ def extract_json_text(text):
 
 # Function to analyze the image for a potential hazard
 def analyze_image(image_path):
-    print("[+] Sending image to OpenAI for analysis...")
-
     # Set your OpenAI API key here
+    print("[+] Sending image to OpenAI for analysis...")
     api_key = OPENAI_API_KEY
+
+    # Define the system prompt
+    question = 'Does the attached image depict a potential hazard? Answer in a JSON string format with the ' \
+               'fields "answer" with either "yes" or "no" only and the field "reason" with a brief explanation for' \
+               ' your answer. Do not include any further text, just the JSON string please.'
 
     # Encode the image
     base64_image = encode_image(image_path)
-
-    # Define your question
-    question = "What potential hazards can you identify in this image?"
 
     # Prepare the headers and payload for the request
     headers = {
@@ -91,41 +92,35 @@ def analyze_image(image_path):
         "Authorization": f"Bearer {api_key}"
     }
 
-payload = {
-    "model": "gpt-4-vision-preview",
-    "messages": [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": question
-                },
-                {
-                    "type": "image_url",
-                    "image_url": f"data:image/jpeg;base64,{base64_image}"
-                }
-            ]
-        }
-    ],
-    "max_tokens": 100
-}
+    payload = {
+        "model": "gpt-4-vision-preview",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": question
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": f"data:image/jpeg;base64,{base64_image}"
+                    }
+                ]
+            }
+        ],
+        "max_tokens": 100
+    }
 
+    # Send the request
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+    response_json = response.json()
+    print("[+] Received response from OpenAI:")
+    print(response_json)
 
-    try:
-        # Send the request
-        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-        response_json = response.json()
+    # Extract the embedded JSON response
+    return extract_json_text(response_json['choices'][0]['message']['content'])
 
-        print("[+] Received response from OpenAI:")
-        print(response_json)  # Print the response for debugging purposes
-
-        # Extract the embedded JSON response
-        # return extract_json_text(response_json['choices'][0]['message']['content'])
-
-    except Exception as e:
-        print("OpenAI API call failed:", e)
-        return None
 
 
 
@@ -187,7 +182,7 @@ def ftp_upload(remote_filename, local_filename=None, latest=False):
 
 
 def main():
-    print("Zenith Go Firmware 20240224.05")
+    print("Zenith Go Firmware 20240224.06")
     print("© 2024 Zenith - All Rights Reserved")
     print("")
     print("Countdown starting...")
