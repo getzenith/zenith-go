@@ -82,6 +82,9 @@ def analyze_image(image_path):
     # Encode the image
     base64_image = encode_image(image_path)
 
+    # Define your question
+    question = "What potential hazards can you identify in this image?"
+
     # Prepare the headers and payload for the request
     headers = {
         "Content-Type": "application/json",
@@ -99,15 +102,35 @@ def analyze_image(image_path):
                         "text": question
                     },
                     {
-                        "type": "image_url",
-                        "image_url": f"data:image/jpeg;base64,{base64_image}"
-                        "detail": "low"
+                        "type": "image",
+                        "image": {
+                            "data": {
+                                "url": f"data:image/jpeg;base64,{base64_image}",
+                                "detail": "low"
+                            }
+                        }
                     }
                 ]
             }
         ],
         "max_tokens": 100
     }
+
+    try:
+        # Send the request
+        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+        response_json = response.json()
+
+        print("[+] Received response from OpenAI.")
+
+        # Extract the embedded JSON response
+        return extract_json_text(response_json['choices'][0]['message']['content'])
+
+    except Exception as e:
+        print("OpenAI API call failed:", e)
+        return None
+
+
 
     try:
         # Send the request
