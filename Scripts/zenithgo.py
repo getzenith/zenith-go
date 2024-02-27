@@ -2,7 +2,7 @@
 
 # Zenith Go Firmware
 # © 2024 Zenith - All Rights Reserved
-FIRMWARE_VERSION = "20240224.10"
+FIRMWARE_VERSION = "20240225.1"
 
 # Import configuration
 from config import FTP_USERNAME, FTP_PASSWORD, FTP_ADDRESS, OPENAI_API_KEY
@@ -10,18 +10,20 @@ from config import FTP_USERNAME, FTP_PASSWORD, FTP_ADDRESS, OPENAI_API_KEY
 import RPi.GPIO as GPIO
 from ftplib import FTP
 from picamera import PiCamera
+from PIL import Image
 import time
 import os
 import base64
 import requests
 import json
 import re
+import threading
 
 # Global Constants
 CAMERA_BTN = 22
-RED_LED = 11
+RED_LED = 15
 GREEN_LED = 13
-BLUE_LED = 15
+BLUE_LED = 11
 
 # FTP Info
 ftp_username = FTP_USERNAME
@@ -68,11 +70,20 @@ def extract_json_text(text):
         return None
 
 
+# Define a function for the LED to blink rapidly
+def rapid_blink(led):
+    for _ in range(5):  # Adjust the number of blinks as needed
+        led.ChangeDutyCycle(25)  # Turn on the LED
+        time.sleep(0.1)  # Adjust the blink rate as needed
+        led.ChangeDutyCycle(0)  # Turn off the LED
+        time.sleep(0.1)  # Adjust the blink rate as needed
+
+
 def analyze_image(image_path):
     print("\033[33m[+] Sending image to OpenAI for analysis...\033[0m")
     api_key = OPENAI_API_KEY
 
-    question = 'Does the attached image depict a potential hazard? Answer in a JSON string format with the ' \
+    question = 'Does the attached image depict a potential hazard such as fallen powerline, fallen tree, house collsape or other hazard? Answer in a JSON string format with the ' \
                'fields "answer" with either "yes" or "no" only and the field "reason" with a brief explanation for' \
                ' your answer. Do not include any further text, just the JSON string please.'
 
@@ -104,33 +115,38 @@ def analyze_image(image_path):
     }
 
     try:
+        # Start a thread to make the LED blink
+        threading.Thread(target=rapid_blink, args=(pwm_led[2],)).start()
         response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
         response_json = response.json()
         print("\033[33m[+] Received response from OpenAI:\033[0m")
         print(response_json)
-        return extract_json_text(response_json['choices'][0]['message']['content'])
+        result = extract_json_text(response_json['choices'][0]['message']['content'])
+        return result
     except Exception as e:
         print("\033[31m[!] Error analyzing image:", e, "\033[0m")
-        toggle_led(pwm_led[0], 100)  # Turn on red LED
+        toggle_led(pwm_led[0], 25)  # Turn on red LED in case of error
         return None
-    finally:
-        toggle_led(pwm_led[0], 0)  # Turn off red LED
 
 
 def grab_and_upload():
     print("\033[33m[+] Getting photo.\033[0m")
-    toggle_led(pwm_led[2], 100)  # Turn on blue LED
+    
 
     pic_name = 'latest_image.jpg'
     camera.capture(pic_name)
+    toggle_led(pwm_led[2], 25)  # Turn on blue LED
+    img = Image.open(pic_name)
+    rotated_img = img.rotate(180)
+    rotated_img.save(pic_name)
 
     toggle_led(pwm_led[2], 0)  # Turn off blue LED
 
     response_json = analyze_image(pic_name)
     if response_json:
         print("")
-        print(f"\033[33m[!] [Hazard Detected] \033[0m")
-        print(f"\033[33m[!] {response_json.get('answer', 'Unknown')}: {response_json.get('reason', 'No reason provided')}\033[0m")
+        print(f"\033[35m[!] [Hazard Dectation Report] \033[0m")
+        print(f"\033[37m[!] {response_json.get('answer', 'Unknown')}: {response_json.get('reason', 'No reason provided')}\033[0m")
         print("")
 
     json_file = 'response.json'
@@ -150,6 +166,8 @@ def ftp_upload(filename=None):
 
     print(f"\033[33m[+] FTP upload: {filename}\033[0m")
     try:
+        # Start a thread to make the LED blink
+        threading.Thread(target=rapid_blink, args=(pwm_led[1],)).start()
         ftp = FTP(host=ftp_addr)
         ftp.set_pasv(False)
         ftp.login(user=ftp_username, passwd=ftp_passwd)
@@ -158,12 +176,14 @@ def ftp_upload(filename=None):
         print("\033[33m[+] FTP completed\033[0m")
     except Exception as e:
         print("\033[31m[!] FTP upload failed:", e, "\033[0m")
+    finally:
+        toggle_led(pwm_led[1], 0)  # Ensure green LED is off
 
 
 def main():
     print("")
-    print("\033[33mZenith Go Firmware", FIRMWARE_VERSION, "\033[0m")
-    print("\033[33m© 2024 Zenith - All Rights Reserved\033[0m")
+    print("\033[36mZenith Go Firmware", FIRMWARE_VERSION, "\033[0m")
+    print("\033[36m© 2024 Zenith - All Rights Reserved\033[0m")
     print("")
     print("\033[33mCountdown starting...\033[0m")
 
@@ -172,8 +192,11 @@ def main():
         time.sleep(1)
 
     print("")
-    print("\033[33m[!] Ready for button input\033[0m")
+    print("\033[32m[!] Ready for button input\033[0m")
     print("")
+    toggle_led(pwm_led[1], 25)  # Turn on green LED
+    time.sleep(1)  # Set the delay to 1 second
+    toggle_led(pwm_led[1], 0)  # Turn off green LED
 
     try:
         while True: 
@@ -181,10 +204,14 @@ def main():
                 if not btn_press:
                     grab_and_upload()
                     btn_press = True
+                    toggle_led(pwm_led[0], 0)  # Turn off red LED
+                    toggle_led(pwm_led[1], 25)  # Turn on green LED
                     print("")
-                    print("\033[33m[!] Ready for button input\033[0m")
+                    print("\033[32m[!] Ready for button input\033[0m")
                     print("\033[33m[!] To end the program use Control+C\033[0m")
                     print("")
+                    time.sleep(1)  # Set the delay to 1 second
+                    toggle_led(pwm_led[1], 0)  # Turn off green LED
             else:
                 btn_press = False
 
@@ -195,12 +222,15 @@ def main():
         GPIO.cleanup()
     except Exception as e:
         print("\033[31m[!] Error occurred:", e, "\033[0m")
-        toggle_led(pwm_led[0], 100)  # Turn on red LED
+        toggle_led(pwm_led[0], 25)  # Turn on red LED
+        time.sleep(1)  # Set the delay to 1 second
+        toggle_led(pwm_led[0], 0)  # Turn off red LED
+        time.sleep(1)  # Set the delay to 1 second
     finally:
         print("")
         print("")
-        print("\033[33m[!] Stay safe out there\033[0m")
-        print("\033[33m[!] Goodbye and we love you! <3\033[0m")
+        print("\033[35m[!] Stay safe out there\033[0m")
+        print("\033[35m[!] Goodbye and we love you! <3\033[0m")
         print("")
 
 
